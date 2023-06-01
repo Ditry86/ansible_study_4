@@ -1,0 +1,9 @@
+---
+clickhouse_version: "23.2.2.20"
+clickhouse_packages:
+  - clickhouse-client
+  - clickhouse-server
+  - clickhouse-common-static
+clickhouse_user: loger
+clickhouse_password: loger
+resource_host: "{{ lookup('env','VECTOR_LOCAL_IP') | ansible.utils.ipv4 }}"
