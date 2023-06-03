@@ -1,3 +1,2 @@
 ---
 nginx_conf_dir: "/etc/nginx"
-lighthouse_source_url: "https://github.com/VKCOM/lighthouse"

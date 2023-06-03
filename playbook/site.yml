@@ -31,121 +31,55 @@
   hosts: clickhouse
   tags: 
     - clickhouse
-  tasks:
-    - block:
-        - name: Get clickhouse distrib
-          ansible.builtin.get_url:
-            url: "https://packages.clickhouse.com/rpm/stable/{{ item }}-{{ clickhouse_version }}.noarch.rpm"
-            dest: "./{{ item }}-{{ clickhouse_version }}.rpm"
-          with_items: "{{ clickhouse_packages }}"
-      rescue:
-        - name: Get clickhouse distrib
-          ansible.builtin.get_url:
-            url: "https://packages.clickhouse.com/rpm/stable/{{ item }}-{{ clickhouse_version }}.x86_64.rpm"
-            dest: "./{{ item }}-{{ clickhouse_version }}.rpm"
-            force: false
-          with_items: "{{ clickhouse_packages }}"
-    - name: Install clickhouse packages
-      become: true
-      ansible.builtin.yum:
-        name:
-          - clickhouse-common-static-{{ clickhouse_version }}.rpm
-          - clickhouse-client-{{ clickhouse_version }}.rpm
-          - clickhouse-server-{{ clickhouse_version }}.rpm
+  pre_tasks:
     - name: Open 8123 clickhouse port
       become: true
       ansible.builtin.shell: | 
         firewall-cmd --zone=public --permanent --add-service=http
         firewall-cmd --zone=public --permanent --add-port=8123/tcp 
         firewall-cmd --reload
+    #- name: Add the user 'loger'
+     # become: true
+      #ansible.builtin.user:
+       # name: loger
+        #groups: clickhouse
+        #append: yes
+  roles:
+    - role: clickhouse
+      become: true
+  post_tasks:
     - name: Set access_mamnagement privileges
       become: true
       ansible.builtin.lineinfile:
         path: /etc/clickhouse-server/users.xml
         search_string: '            <!-- <access_management>1</access_management> -->'
         line: '            <access_management>1</access_management>'
-    - name: Set access to remote host connection
-      become: true
-      ansible.builtin.lineinfile:
-        path: /etc/clickhouse-server/config.xml
-        search_string: '    <!-- <listen_host>0.0.0.0</listen_host> -->'
-        line: '    <listen_host>0.0.0.0</listen_host>'
-    - name: Enable and start clickhouse-server
-      become: true
-      ansible.builtin.systemd:
-        name: clickhouse-server
-        enabled: true
-        state: started
     - name: Create database
-      ansible.builtin.command: clickhouse-client -q "create database logs;"
+      ansible.builtin.command: clickhouse-client -q "create database {{ database }};"
       register: create_db
       failed_when: create_db.rc != 0 and create_db.rc !=82
       changed_when: create_db.rc == 0
     - name: Create database user
-      ansible.builtin.command: clickhouse-client -q "CREATE USER IF NOT EXISTS {{ clickhouse_user }} HOST IP '{{ resource_host }}' IDENTIFIED WITH sha256_password BY '{{ clickhouse_password }}';"
+      ansible.builtin.command: clickhouse-client -q "CREATE USER IF NOT EXISTS {{ db_user }} HOST IP '{{ resource_host }}' IDENTIFIED WITH sha256_password BY '{{ db_password }}';"
       changed_when: false
     - name: Create table
-      ansible.builtin.command: clickhouse-client -q "CREATE TABLE IF NOT EXISTS logs.test_logs (file String, host String, message String, source_type String, timestamp DateTime64) ENGINE = TinyLog;"
+      ansible.builtin.command: clickhouse-client -q "CREATE TABLE IF NOT EXISTS logs.{{ db_table }} (file String, host String, message String, source_type String, timestamp DateTime64) ENGINE = TinyLog;"
       changed_when: false
 - name: Deploy Vector
   hosts: vector
   tags:
     - vector
-  handlers:
-    - name: Restart vector
-      become: true
-      ansible.builtin.service:
-        name: vector
-        enabled: true
-        state: restarted
-  tasks:
-    - name: Get vector rpm
-      ansible.builtin.get_url:
-        url: "https://packages.timber.io/vector/{{ vector_version }}/vector-{{ vector_version }}-1.{{ ansible_architecture }}.rpm"
-        dest: "./vector-{{ vector_version }}.rpm"
-        mode: '0755'
-    - name: Install vector
-      become: true
-      ansible.builtin.yum:
-        name: "{{ ansible_user_dir }}/vector-{{ vector_version }}.rpm"
-        state: present
-    - name: Configure Vector | Template config
-      become: true
-      ansible.builtin.template:
-        src: vector.yml.j2
-        mode: 0644
-        dest: "{{ vector_config_dir }}/vector.yml"
-    - name: Enable vector service
-      become: true
-      ansible.builtin.service:
-        name: vector
-        enabled: true
-    - name: Change systemd vector.service unit (start with required config)
-      become: true
-      ansible.builtin.replace:
-        path: /etc/systemd/system/multi-user.target.wants/vector.service
-        regexp: '[$]'
-        after: "^(usr/bin/vector)[/s]*[a-z]*"
-        #before: "$"
-        replace: "--config-yaml={{ vector_config_dir }}/vector.yml"
-    - name: Create source log file
-      become: true
-      ansible.builtin.file:
-        path: "{{ ansible_user_dir }}/test.log"
-        state: touch
-        mode: 0644
-      notify: 
-        - Restart vector
+  roles:
+    - role: vector-role
+      vars:
+        dest_host: "{{ lookup('env','CLICKHOUSE_LOCAL_IP') | ansible.utils.ipv4 }}"
+        clickhouse_user: loger
+        clickhouse_password: loger
 - name: Deploy Lighthouse
   hosts: lighthouse
   tags:
     - lighthouse
   pre_tasks:
-    - name: Istall the latest version of git
-      become: true
-      ansible.builtin.yum:
-        name: git
-        state: present
     - name: Add nginx repository
       become: true
       ansible.builtin.yum_repository:
@@ -188,10 +122,7 @@
     - name: Reboot system
       become: true
       ansible.builtin.reboot:
-  tasks:
-    - name: Clone lighthouse
-      become: true
-      ansible.builtin.git:
-        repo: "{{ lighthouse_source_url }}"
-        dest: /data/www
-        version: master
+  roles:
+    - role: lighthouse-role
+      vars: 
+        - lighthouse_dir: /data/www
