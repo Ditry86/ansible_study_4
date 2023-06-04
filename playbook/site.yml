@@ -31,25 +31,17 @@
   hosts: clickhouse
   tags: 
     - clickhouse
+  become: true
   pre_tasks:
     - name: Open 8123 clickhouse port
-      become: true
       ansible.builtin.shell: | 
         firewall-cmd --zone=public --permanent --add-service=http
         firewall-cmd --zone=public --permanent --add-port=8123/tcp 
         firewall-cmd --reload
-    #- name: Add the user 'loger'
-     # become: true
-      #ansible.builtin.user:
-       # name: loger
-        #groups: clickhouse
-        #append: yes
   roles:
-    - role: clickhouse
-      become: true
+    - clickhouse    
   post_tasks:
     - name: Set access_mamnagement privileges
-      become: true
       ansible.builtin.lineinfile:
         path: /etc/clickhouse-server/users.xml
         search_string: '            <!-- <access_management>1</access_management> -->'
@@ -70,11 +62,7 @@
   tags:
     - vector
   roles:
-    - role: vector-role
-      vars:
-        dest_host: "{{ lookup('env','CLICKHOUSE_LOCAL_IP') | ansible.utils.ipv4 }}"
-        clickhouse_user: loger
-        clickhouse_password: loger
+    - vector-role
 - name: Deploy Lighthouse
   hosts: lighthouse
   tags:
@@ -123,6 +111,4 @@
       become: true
       ansible.builtin.reboot:
   roles:
-    - role: lighthouse-role
-      vars: 
-        - lighthouse_dir: /data/www
+    - lighthouse-role

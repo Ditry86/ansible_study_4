@@ -43,7 +43,7 @@ get_ip:
 
 play:
 	@source auto/prepare_ansible.sh
-	@export ANSIBLE_HOST_KEY_CHECKING=False && cd playbook/ && ansible-playbook site.yml -i inventory/prod.yml
+	@export ANSIBLE_HOST_KEY_CHECKING=False && cd playbook/ && ansible-galaxy install -r requirements.yml -p roles && ansible-playbook site.yml -i inventory/prod.yml
 
 info:
 	@echo Your VM IP adresses:
